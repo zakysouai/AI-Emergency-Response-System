@@ -196,6 +196,8 @@ def load_responders(path: Path, graph: Graph, warnings: list[str]) -> tuple[Resp
     responders: dict[str, Responder] = {}
     for where, row in _read_csv(path, columns):
         rid = row["responder_id"]
+        if not rid:
+            raise DataError(f"{where}: empty responder_id")
         if rid in responders:
             raise DataError(f"{where}: duplicate responder id {rid!r}")
         _require_node(graph, row["start_location"], where)
@@ -232,6 +234,8 @@ def load_incidents(path: Path, graph: Graph, warnings: list[str]) -> tuple[Incid
     incidents: dict[str, Incident] = {}
     for where, row in _read_csv(path, columns):
         iid = row["incident_id"]
+        if not iid:
+            raise DataError(f"{where}: empty incident_id")
         if iid in incidents:
             raise DataError(f"{where}: duplicate incident id {iid!r}")
         _require_node(graph, row["location"], where)
@@ -289,7 +293,8 @@ def load_road_cpts(path: Path) -> RoadCPTs:
     )
 
 
-def load_traffic_observations(path: Path, graph: Graph) -> dict[Edge, tuple[TrafficLevel, ...]]:
+def load_traffic_observations(path: Path, graph: Graph,
+                              warnings: list[str]) -> dict[Edge, tuple[TrafficLevel, ...]]:
     columns = ["observation_nr", "from", "to", "traffic_observation"]
     sequences: dict[Edge, dict[int, TrafficLevel]] = defaultdict(dict)
     for where, row in _read_csv(path, columns):
@@ -302,6 +307,13 @@ def load_traffic_observations(path: Path, graph: Graph) -> dict[Edge, tuple[Traf
             raise DataError(f"{where}: duplicate observation_nr {int(number)} for {edge[0]}->{edge[1]}")
         sequences[edge][int(number)] = _parse_enum(TrafficLevel, row["traffic_observation"], where)
     # observation_nr only orders each road's own sequence; it is not a timestamp.
+    # The HMM treats consecutive observations as consecutive time steps, so a
+    # gap (1, 2, 4) would silently skip a step: flag it.
+    for (a, b), obs in sequences.items():
+        numbers = sorted(obs)
+        if numbers[-1] - numbers[0] + 1 != len(numbers):
+            warnings.append(f"{path.name}: observation_nr of {a}->{b} has gaps; "
+                            f"treated as consecutive steps")
     return {edge: tuple(obs[n] for n in sorted(obs)) for edge, obs in sequences.items()}
 
 
@@ -344,14 +356,19 @@ def load_scenario(folder: str | Path) -> Scenario:
             warnings.append(f"{incident.id}: no responder has capability "
                             f"{incident.required_capability!r}; it cannot be handled")
 
+    road_evidence = load_road_reports(file("road_reports.csv"), graph)
+    road_cpts = load_road_cpts(file("road_probabilities.json"))
+    traffic_observations = load_traffic_observations(file("observed_traffic.csv"), graph, warnings)
+    hmm = load_hmm(file("traffic_probabilities.json"))
+
     return Scenario(
         name=folder.name,
         graph=graph,
         responders=responders,
         incidents=incidents,
-        road_evidence=load_road_reports(file("road_reports.csv"), graph),
-        road_cpts=load_road_cpts(file("road_probabilities.json")),
-        traffic_observations=load_traffic_observations(file("observed_traffic.csv"), graph),
-        hmm=load_hmm(file("traffic_probabilities.json")),
-        warnings=tuple(warnings),
+        road_evidence=road_evidence,
+        road_cpts=road_cpts,
+        traffic_observations=traffic_observations,
+        hmm=hmm,
+        warnings=tuple(warnings),  # built last, after every loader had its say
     )

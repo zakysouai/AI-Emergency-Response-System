@@ -284,6 +284,23 @@ def test_empty_required_capability(scenario_copy):
         load_scenario(scenario_copy)
 
 
+@pytest.mark.parametrize("file, old, new, message", [
+    ("responders.csv", "R1,FireTruck", ",FireTruck", "empty responder_id"),
+    ("incidents.csv", "I1,N4", ",N4", "empty incident_id"),
+])
+def test_empty_id(scenario_copy, file, old, new, message):
+    _replace(scenario_copy / file, old, new)
+    with pytest.raises(DataError, match=message):
+        load_scenario(scenario_copy)
+
+
+def test_gap_in_observation_nr_is_a_warning(scenario_copy):
+    # 1, 3, 4, ... : observation 2 of H1->N1 is missing.
+    _replace(scenario_copy / "observed_traffic.csv", "\n2,H1,N1", "\n11,H1,N1")
+    s = load_scenario(scenario_copy)
+    assert any("H1->N1 has gaps" in w for w in s.warnings)
+
+
 def test_impossible_deadline_is_a_warning(scenario_copy):
     # I5 appears at t=50; a deadline of 40 cannot be met but is not malformed.
     _replace(scenario_copy / "incidents.csv", "I5,N1,High,200", "I5,N1,High,40")
