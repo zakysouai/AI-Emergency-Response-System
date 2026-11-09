@@ -53,7 +53,7 @@ def test_incidents_sorted_by_timestamp(name):
 
 @pytest.mark.parametrize("name", ALL_SCENARIOS)
 def test_every_road_is_at_least_as_long_as_straight_line(name):
-    # Needed for the A* heuristic (euclidean / max speed) to be admissible.
+    # Sanity check: coordinates and distances in city_graph.json are consistent.
     graph = load_scenario(SCENARIOS / name).graph
     for road in graph.roads.values():
         assert road.distance >= graph.euclidean(road.from_node, road.to_node)
@@ -67,7 +67,6 @@ def test_scenario1_graph_details():
     assert graph.nodes["H1"].type == "hospital"
     assert {r.to_node for r in graph.outgoing("N1")} == {"H1", "N2"}
     assert graph.road("N1", "N3") is None
-    assert graph.max_speed == 30
 
 
 def test_scenario1_responders():

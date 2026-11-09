@@ -191,14 +191,14 @@ def test_certainly_blocked_with_threshold_one_does_not_divide_by_zero():
     dict(traffic_factors={LOW: 0.8, MED: 1.2, HIGH: 1.5}),
     dict(traffic_factors={LOW: 1.0, HIGH: 1.5}),
 ])
-def test_params_reject_factors_that_break_admissibility(bad):
+def test_params_reject_speedup_factors(bad):
     with pytest.raises(ValueError):
         WorldParams(**bad)
 
 
 @pytest.mark.parametrize("name", ALL_SCENARIOS)
 def test_costs_stay_between_base_time_and_max_slowdown(name):
-    # Lower bound keeps the A* heuristic admissible; upper bound = 1.5 (status) × 1.5 (traffic).
+    # Lower bound: factors only slow down; upper bound = 1.5 (status) × 1.5 (traffic).
     s = load_scenario(SCENARIOS / name)
     for edge, belief in build_world(s).beliefs.items():
         if belief.usable:

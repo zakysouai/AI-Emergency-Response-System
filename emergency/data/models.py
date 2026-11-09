@@ -121,10 +121,6 @@ class Graph:
         na, nb = self.nodes[a], self.nodes[b]
         return math.hypot(na.x - nb.x, na.y - nb.y)
 
-    @property
-    def max_speed(self) -> float:
-        return max(road.speed for road in self.roads.values())
-
 
 @dataclass(frozen=True)
 class Responder:

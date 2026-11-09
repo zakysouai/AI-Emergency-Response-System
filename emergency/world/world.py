@@ -38,8 +38,8 @@ class WorldParams:
     def __post_init__(self):
         if set(self.traffic_factors) != set(TrafficLevel):
             raise ValueError("traffic_factors needs a factor for every traffic level")
-        # Every cost must be >= the road's base time, otherwise the A* heuristic
-        # (straight-line distance / max speed) is no longer admissible.
+        # Factors are slowdowns: a road is never faster than its base time
+        # (distance / speed limit).
         if min(self.congested_factor, *self.traffic_factors.values()) < 1:
             raise ValueError("all slowdown factors must be >= 1")
 
