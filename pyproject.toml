@@ -1,0 +1,13 @@
+[project]
+name = "emergency-response"
+version = "0.1.0"
+description = "AI decision-support system for storm emergency response (AI practicum)"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
