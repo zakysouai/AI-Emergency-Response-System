@@ -704,6 +704,186 @@ Beide geven dezelfde score, alleen met meer zoekwerk.
 
 ---
 
+## 2026-11-11: Ontwerpkeuzes stap 5: Monte Carlo-evaluatie (brainstorm, geen code)
+
+**Het probleem:** het percentage "op tijd" in `statistics.txt` is een **voorspelling van ons eigen model**, geen meting. Twee dingen worden niet getest:
+1. **Blokkades:** de kost van een bruikbare weg is de verwachte reistijd *gegeven dat de weg niet geblokkeerd is*. Een weg met P_B = 0,45 telt als gewoon rijdbaar.
+2. **Spreiding:** "op tijd" = verwachte aankomst ≤ deadline. Bij een kleine marge (I6 in S1: 140,7 tegenover 140) is het in werkelijkheid ongeveer een muntworp.
+
+**Wat Monte Carlo níét kan:** bewijzen dat de kansen in de bestanden kloppen; er is geen grondwaarheid. Het meet wel hoe goed de **beslisregels** (verwachte waarde + τ, revise) werken als het model klopt, en hoe robuust het plan is als het model niet klopt.
+
+### Keuze 15: waaruit trekken we de "echte" wereld? (A, aanvaard)
+- Uit onze eigen posterior, per gerichte weg onafhankelijk: status uit P(Status | weer, rapporten), verkeer uit de gefilterde HMM-verdeling (één keer per steekproef, daarna statisch, zoals keuze 3).
+- Onafhankelijk mag: volgens `Scenarios/README.md` is het weer lokaal per weg.
+- **Beperking:** N1→N2 en N2→N1 worden onafhankelijk getrokken; in werkelijkheid hangen ze waarschijnlijk samen.
+- Alternatief B (een ander waarheidsmodel) is gevoeligheidsanalyse: keuze 18.
+
+### Keuze 16: wat als een route geblokkeerd blijkt? (B, aanvaard)
+- **B, omrijden:** de responder ontdekt een blokkade pas aan het begin van die weg en zoekt daar met UCS een nieuwe route, in het verwachte wereldmodel zonder de blokkades die hij al kent. Geen route meer: het incident mislukt en hij blijft staan waar hij is.
+- Verworpen: A (taak mislukt meteen) is te streng en meet alleen Π(1 − P_B); C (opnieuw toewijzen tijdens de simulatie) is te veel werk voor de resterende tijd.
+- **Uitvoering:** vertrek = max(geplande vertrektijd, echt vrij). Nooit vroeger dan gepland, anders vertrekt hij voor het incident bekend is. Vertraging schuift door in de keten. Staat hij niet aan het begin van zijn volgende pad, dan zoekt hij een route vanaf zijn huidige plek.
+
+### Keuze 17: reistijd van een weg in een steekproef (aanvaard)
+- Open: `t × verkeersfactor`; Congested: `t × 1,5 × verkeersfactor`; Blocked: onbruikbaar.
+- Dezelfde factoren als het model, zodat we het effect van spreiding en blokkades meten, niet van andere aannames.
+
+### Keuze 18: cijfers en vergelijkingen (aanvaard)
+- Per steekproef: % deadlines gehaald (over alle incidenten), gemiddelde responstijd, aantal niet bereikte incidenten. Samengevat: gemiddelde met 95%-betrouwbaarheidsinterval, en **P(op tijd) per incident**.
+- N = 1000, vaste seed. **Common random numbers:** elke variant wordt op dezelfde getrokken werelden uitgevoerd.
+- Vergelijkingen: (1) beslisparameters (τ ∈ {0,3; 0,5; 0,7; 0,9}, revise A/B) onder dezelfde waarheid; (2) een verkeerd model (stationaire verkeersverdeling, "Storm" voor wegen zonder rapporten) met hetzelfde plan.
+
+### Keuze 19: waar komt het? (aanvaard)
+- `emergency/evaluation/montecarlo.py`.
+- `run.py --samples N` (standaard 1000, 0 = uit) voegt een sectie "Monte Carlo" toe aan `statistics.txt`, onder het verplichte blok.
+- Gevoeligheidsanalyse in een apart script `evaluate.py`.
+
+**Tijdsplanning (deadline 12/11 23:59):** 5a = trekken + uitvoeren + cijfers + sectie in `statistics.txt`; 5b = `evaluate.py`; daarna het verslag. **Laten vallen:** kostenmodel fijnregelen en optie 4/5. Die komen in het verslag als voorgestelde verbeteringen, met hoe we ze met Monte Carlo zouden beoordelen.
+
+---
+
+## 2026-11-11: Stap 5a: Monte Carlo (`emergency/evaluation/`)
+
+**Wat:**
+- **`montecarlo.py`** (ongeveer 160 lijnen, waarvan ongeveer 20 docstring):
+  - `sample_worlds(truth, n, seed)`: N werelden; per gerichte weg een status en een verkeersniveau uit de verdelingen van het `truth`-wereldmodel. De werelden worden één keer getrokken en dan voor elk plan hergebruikt (common random numbers).
+  - `execute(scenario, plan, world, sample)`: voert het vaste plan uit volgens keuze 16 en geeft de echte aankomsttijd per bereikt incident.
+  - `evaluate(...)` geeft een `MonteCarloResult`: % gehaald per wereld, responstijd per wereld, aantal niet bereikte incidenten per wereld, P(op tijd) per incident. `mean_ci` geeft het gemiddelde en de halve breedte van het 95%-interval (normale benadering).
+  - `format_monte_carlo(...)`: de sectie voor `statistics.txt`.
+- **`run.py`**: `--samples N` (standaard 1000, 0 = uit) en `--seed S` (standaard 0).
+- **README** bijgewerkt.
+
+**Keuzes tijdens het bouwen:**
+| Keuze | Waarom |
+|---|---|
+| Omrijden gebruikt UCS uit `emergency/search` op een kleine wrapper `_KnownWorld` (het verwachte wereldmodel zonder de gekende blokkades) | Geen wijziging aan de geteste zoekcode nodig; UCS heeft alleen `graph` en `neighbors` nodig |
+| De `truth` voor het trekken is een apart wereldmodel | Zo kan 5b een ander waarheidsmodel (stationair verkeer, Storm) gebruiken met hetzelfde plan |
+| Een responder onthoudt de blokkades die hij tegenkwam, ook voor zijn volgende taken | Realistisch, en het kost niets extra |
+| Het rijden stopt altijd | Elke stap rijdt een weg verder of voegt een nieuwe gekende blokkade toe; beide zijn eindig |
+
+**Controle van de uitvoering:** in een "wereld" zonder blokkades en met precies de verwachte reistijden geeft `execute` voor alle 3 scenario's × A/B **exact** de aankomsttijden van de planner (verschil ≤ 1e-12). Een andere seed (7) geeft voor S1 49,9% ± 1,4 tegenover 50,2% ± 1,4.
+
+**Resultaten** (1000 werelden, seed 0, `revise` = B tenzij vermeld):
+| | voorspeld (verwachte tijden) | Monte Carlo | niet bereikt per wereld | responstijd voorspeld → MC |
+|---|---|---|---|---|
+| S1 | 71,4% | 50,2% ± 1,4 | 0,88 | 107,4 → 109,5 s |
+| S2 | 58,3% | 54,6% ± 1,0 | 0,10 | 39,1 → 41,7 s |
+| S3 (A) | 50,0% | 39,5% ± 0,6 | 3,49 | 1430,5 → 1573,4 s |
+| S3 (B) | 55,0% | 42,7% ± 0,6 | 3,40 | 1326,7 → 1497,1 s |
+
+**Wat leren we hieruit:**
+- **Het voorspelde percentage is te optimistisch**, in S1 met ruim 20 procentpunten. Dat bevestigt de vrees uit 3a: het eigen cijfer is zelfreferentieel.
+- **De grootste oorzaak zijn blokkades**, niet de spreiding van de reistijd. In S1 wordt I3 in 297 van de 1000 werelden niet bereikt: zijn route is maar met kans 0,65 vrij (`route_reliability`), en S1 heeft amper omwegen. Het kostenmodel (reistijd *gegeven niet geblokkeerd*) negeert dat risico helemaal.
+- **Waar komt die blokkadekans vandaan?** De meeste wegen hebben geen rapporten en krijgen P(Blocked) = 0,135, door te marginaliseren over het weer (keuze 1). Die aanname bepaalt de Monte Carlo-cijfers dus sterk. 5b test ze met de "Storm"-variant.
+- **Het voordeel van B in S3 blijft overeind:** +3,2 procentpunten, ver buiten de intervallen. Dat is nu een *gemeten* voordeel, niet alleen een voorspeld.
+- **Opgelet bij de responstijd in Monte Carlo:** die is het gemiddelde over de *bereikte* incidenten. Als moeilijke incidenten mislukken, vallen ze weg; het cijfer is dan te gunstig. Daarom staat "Incidents not reached" ernaast.
+- **Gevolg voor het verslag:** dit is precies het argument voor optie 4 (risicotoeslag voor P_B). We kunnen het nu meten in plaats van beweren, maar we bouwen het niet meer (tijd).
+
+**Tests:** zie de volgende sectie. Nog niet gedaan: 5b (`evaluate.py`).
+
+---
+
+## 2026-11-11: Testsuite voor stap 5a (`tests/test_montecarlo.py`)
+
+**Aanpak:**
+- **Trekken** wordt getest tegen de verdelingen waaruit getrokken wordt: met zekere beliefs (exacte reistijd) en statistisch op S1 (4000 werelden, afwijking < 4 standaardfouten).
+- **Uitvoeren** wordt getest op een kleine stad (A, B, C, G) waarvan de echte reistijden per test met de hand gekozen worden. Zo is elke verwachte aankomsttijd op papier na te rekenen.
+
+**Tests** (24):
+- **Trekken:**
+  - de reistijd per combinatie status × verkeer (4 gevallen) en een zekere blokkade;
+  - de frequenties volgen de beliefs: P(Blocked) voor een weg met en zonder rapporten, en de volledige verdeling van de vertragingsfactor;
+  - reproduceerbaar met dezelfde seed, anders met een andere.
+- **Uitvoeren:**
+  - het geplande pad met de echte tijden;
+  - nooit vroeger vertrekken dan gepland;
+  - vertraging schuift door naar de volgende taak;
+  - omrijden pas aan het begin van de geblokkeerde weg;
+  - de goedkoopste omweg *volgens het verwachte model*, en geen weg die het model onbruikbaar vindt (P_B > τ), ook al is die in werkelijkheid open;
+  - twee blokkades na elkaar: het incident mislukt, de responder blijft staan en rijdt van daar naar zijn volgende taak;
+  - in de verwachte wereld exact de aankomsttijden van de planner (3 scenario's × A/B).
+- **Samenvatten:**
+  - `evaluate` met de hand: 3 werelden (precies op de deadline, te laat, niet bereikt);
+  - het betrouwbaarheidsinterval;
+  - de tekst;
+  - `run.py --samples`: de sectie staat er alleen als erom gevraagd wordt, en is reproduceerbaar.
+
+**Fouten in de tests zelf (door de LLM, gevonden doordat de tests faalden):**
+- Factor 1,5 als "High verkeer" geteld, terwijl Congested + Low ook 1,5 geeft. De test vergelijkt nu de volledige verdeling van de factor.
+- De hulpfunctie voor een getrokken wereld kende de extra wegen van één test niet.
+
+**Mutatietest:** 24 bugs in `montecarlo.py`. Eerst werden er 21 opgemerkt:
+- **gemist:** deadline `<` in plaats van `<=` → de test met de hand laat nu één wereld precies op de deadline aankomen;
+- **gemist:** omrijden zonder verwachte kosten en zonder τ → nieuwe test met twee omwegen en een "onbruikbare" weg;
+- **equivalent:** de begintijd `available_from` negeren. In een geldig plan is de vertrektijd altijd ≥ `available_from` (validatorregel T2), dus `max(vertrek, vrij)` verandert niet.
+- Twee mutanten laten het omrijden eeuwig lussen; de tijdslimiet vangt ze.
+- Eindscore **23/24**, de overblijvende is equivalent.
+
+**Resultaat:** 205 tests slagen.
+
+---
+
+## 2026-11-11: Stap 5b: gevoeligheidsanalyse (`evaluate.py`)
+
+**Wat:** `evaluate.py` (ongeveer 110 lijnen, waarvan ongeveer 15 docstring) maakt per scenario één tabel. `python evaluate.py [SCENARIO ...] [--samples N] [--seed S] [--out FILE]`.
+- **Beslisvarianten:** τ ∈ {0,3; 0,5; 0,7; 0,9} en zonder revise. Elk plan wordt in **dezelfde** getrokken werelden uitgevoerd als het basisplan. De kolom "vs base" is daarom een **gepaard verschil** per wereld, met een eigen 95%-interval. Dat is veel smaller dan de intervallen van de twee gemiddelden apart.
+- **Waarheidsvarianten:** het basisplan in werelden uit een ander model voor de wegen *zonder data*: verkeer uit de stationaire verdeling van de HMM (π = π·T, met iteratie) in plaats van `initial`, of het weer "Storm" in plaats van de weersprior.
+- Duurt ongeveer 2 s voor de 3 scenario's.
+
+**Resultaten** (1000 werelden, seed 0, % deadlines gehaald):
+| variant | S1 | S2 | S3 |
+|---|---|---|---|
+| basis (τ 0,5, revise), voorspeld | 71,4 | 58,3 | 55,0 |
+| basis, Monte Carlo | 50,2 ± 1,4 | 54,6 ± 1,0 | 42,7 ± 0,6 |
+| τ 0,3 (vs basis) | +0,0 | +0,0 | +0,0 |
+| τ 0,7 en τ 0,9 (vs basis) | **+3,9 ± 0,8** | +0,0 | **−3,1 ± 0,2** |
+| zonder revise (vs basis) | +0,0 | +0,0 | **−3,2 ± 0,2** |
+| waarheid: stationair verkeer | 50,2 ± 1,4 | 45,5 ± 1,0 | 40,0 ± 0,6 |
+| waarheid: Storm | **20,6 ± 0,8** | **36,9 ± 0,8** | **17,0 ± 0,5** |
+
+**Controles en verklaringen:**
+- **Waarom zijn veel τ-rijen gelijk?** P(Blocked) neemt maar een paar waarden aan: ≈0, 0,135 (alle wegen zonder rapporten), 0,527, 0,83 en 0,998. τ verandert het plan alleen als het over zo'n waarde springt. τ 0,3 ≡ τ 0,5, en τ 0,7 ≡ τ 0,9 in S1/S3. In S2 maakt τ 0,9 de wegen met 0,83 bruikbaar, maar het plan gebruikt ze niet.
+- **Stationair verkeer verandert niets in S1:** daar hebben alle 14 wegen observaties, dus de variant raakt geen enkele weg. In S2 hebben maar 3 van de 30 wegen observaties: −9,1 procentpunten.
+- **De stationaire verdeling** is in S1 en S3 Low 0,354 / Medium 0,386 / High 0,26, tegenover `initial` 0,6 / 0,3 / 0,1. In S2 (een andere HMM) is ze 0,288 / 0,423 / 0,288, tegenover 0,5 / 0,35 / 0,15. Ze is dus overal veel pessimistischer, zoals al vermoed in keuze 3. *(Verbeterd bij de tests van 5b: eerst stond hier één verdeling voor alle scenario's, maar elk scenario heeft een eigen HMM.)*
+
+**Wat leren we hieruit (voor het verslag):**
+1. **Er is geen beste τ.** In S1 helpt een hogere τ (+3,9), in S3 schaadt hij (−3,1). In S1 gebruikt τ 0,7 voor I2 de directe weg N1→N2 (P_B 0,527). Als die geblokkeerd is, ziet de responder dat al bij zijn vertrek in N1 en rijdt hij **zonder verlies** om via H1. Een riskante weg met een goedkope uitwijkmogelijkheid is dus een goede gok. Een drempel op P_B ziet dat verschil niet. **Voorgestelde verbetering:** een kost die de verwachte omrijtijd bij een blokkade meerekent (een verwachte kost "met herstel"), met optie 4 (risicotoeslag) als eenvoudige versie. Beoordelen met precies deze tabel.
+   - **Opgelet:** dat resultaat hangt af van onze aanname dat een blokkade pas aan het begin van de weg ontdekt wordt (keuze 16).
+2. **Revise helpt gemeten in S3** (+3,2 ± 0,2), en maakt in S1/S2 geen verschil (de plannen zijn daar gelijk, zie 3b).
+3. **De grootste onzekerheid is de weersaanname voor wegen zonder rapporten (keuze 1).** Is het daar Storm, dan zakt S3 van 42,7% naar 17,0%, en worden er 12,2 incidenten per wereld niet bereikt. Geen enkele beslisparameter heeft zo'n groot effect. **Voorgestelde verbetering:** optie 5 (het weer afleiden uit de rapporten van naburige wegen), te beoordelen met de waarheidsvarianten.
+4. **De responstijd daalt bij Storm in S1 (109,5 → 107,0 s).** Dat is geen verbetering: moeilijke incidenten mislukken en vallen weg uit het gemiddelde. Dat is precies de vertekening die in 5a al vermeld werd.
+
+**Tests:** zie de volgende sectie.
+
+---
+
+## 2026-11-11: Testsuite voor stap 5b (`tests/test_evaluate.py`)
+
+**Kleine wijziging in de code:** `truth_variant` weigert nu een onbekende variant (`ValueError`). Eerst gaf een tikfout stil de gewone wereld terug.
+
+**Tests** (15):
+- **Stationaire verdeling:**
+  - met de hand: 2 toestanden, T = [[0,9; 0,1]; [0,5; 0,5]] geeft (5/6, 1/6);
+  - voor alle 3 scenario's een vast punt (π·T = π, som 1);
+  - de waarden van S1.
+- **Waarheidsvarianten, weg per weg:** alleen de wegen zonder observaties krijgen π, alleen de wegen zonder rapporten krijgen de Storm-verdeling; de rest blijft onveranderd. Een onbekende variant wordt geweigerd.
+- **`analyse`:**
+  - de rijen in de juiste volgorde, de juiste voorspelde percentages;
+  - **common random numbers:** in S2 verandert geen enkele beslisvariant het plan, dus elke rij moet *wereld per wereld* gelijk zijn aan de basis;
+  - in S3 veranderen τ 0,7 en "zonder revise" het plan echt (voorspeld 50% tegenover 55%);
+  - reproduceerbaar.
+- **Tabel:** een gepaard verschil met de hand. De variant is per wereld precies 10 punten beter: +10,0 ± 0,0, terwijl het gemiddelde alleen een interval van ±56,6 heeft. Basis- en waarheidsrijen tonen geen verschil.
+- **Commandolijn:** `--out` schrijft precies wat afgedrukt wordt; een selectie van scenario's; `--samples 1` is een gebruiksfout.
+
+**Fouten in de tests zelf (door de LLM):**
+- Verwachte waarden van de stationaire verdeling van S1 gebruikt voor S2. Elk scenario heeft een eigen HMM. Daardoor bleek ook een zin in "Stap 5b" fout; die is verbeterd.
+- Een verkeerde kolomindex, omdat "tau 0.7" uit twee woorden bestaat.
+
+**Mutatietest:** 15 bugs in `evaluate.py`. Eerst 13 opgemerkt. Gemist: "τ-variant genegeerd" en "revise-variant genegeerd". In S2 verandert geen enkele variant het plan, dus geen test zag het verschil. De nieuwe test op S3 vangt ze: **15/15**.
+
+**Resultaat:** 220 tests slagen.
+
+---
+
 ## Open punten / volgende stappen
 - [x] Tests voor het wereldmodel (met de hand nagerekende gevallen).
 - [x] Stap 2: UCS één-naar-allen per bron (keuze B).
@@ -715,7 +895,12 @@ Beide geven dezelfde score, alleen met meer zoekwerk.
 - [x] Stap 4a: `plan.json` + validator (39 tests, mutaties 19/19).
 - [x] Stap 4b: statistieken + `run.py` + `README.md`.
 - [x] Tests voor 4b (19 tests, mutaties 20/20).
-- [ ] Stap 5: Monte Carlo-evaluatie en gevoeligheidsanalyse (τ, weer, stationaire verdeling).
-- [ ] Kostenmodel fijnregelen (vooral de verkeersfactor), maar beoordeeld met Monte Carlo en niet met het eigen percentage "op tijd", dat zelfreferentieel is.
+- [x] Brainstorm stap 5 (keuzes 15–19).
+- [x] Stap 5a: Monte Carlo in `statistics.txt`.
+- [x] Tests voor 5a (24 tests, mutaties 23/24, de overblijvende is equivalent).
+- [x] Stap 5b: `evaluate.py` (gevoeligheidsanalyse: τ, revise, stationaire verdeling, Storm).
+- [x] Tests voor 5b (15 tests, mutaties 15/15).
+- [ ] Verslag (3 pagina's + promptpagina).
+- [ ] ~~Kostenmodel fijnregelen~~: laten vallen wegens tijd (keuze 19); komt in het verslag als voorgestelde verbetering, te beoordelen met Monte Carlo.
 - [ ] Later, als er tijd is: optie 4 (risicotoeslag) en optie 5 (weer afleiden).
 - [x] `main.py` (het PyCharm-voorbeeld) verwijderd.

@@ -1,10 +1,11 @@
 """Entry point (design choice 13): plan one scenario and write plan.json + statistics.txt.
 
-    python run.py [SCENARIO] [--out DIR] [--no-revise] [--tau TAU]
+    python run.py [SCENARIO] [--out DIR] [--no-revise] [--tau TAU] [--samples N] [--seed S]
 
 SCENARIO is the name of a folder in Scenarios/ (default: Scenario1) or a path
 to any scenario folder. The written plan.json is read back and validated. Exit code 0 means
-a valid plan, 1 an invalid plan, 2 unusable input.
+a valid plan, 1 an invalid plan, 2 unusable input. With --samples N > 0 the
+plan is also executed in N sampled true worlds (Monte Carlo, design choice 19).
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from pathlib import Path
 
 from emergency.allocation import simulate
 from emergency.data import DataError, load_scenario
+from emergency.evaluation import evaluate, format_monte_carlo, sample_worlds
 from emergency.plan import compute_statistics, format_statistics, validate_plan_text, write_plan
 from emergency.world import WorldParams, build_world
 
@@ -31,9 +33,14 @@ def main(argv: list[str] | None = None) -> int:
                         help="never re-plan tasks that have not departed yet (option A)")
     parser.add_argument("--tau", type=float, default=WorldParams().blocked_threshold,
                         help="a road is unusable when P(Blocked) > TAU (default: %(default)s)")
+    parser.add_argument("--samples", type=int, default=1000,
+                        help="Monte Carlo worlds to execute the plan in; 0 = none (default: %(default)s)")
+    parser.add_argument("--seed", type=int, default=0, help="seed of the Monte Carlo sampling (default: 0)")
     args = parser.parse_args(argv)
     if not 0 <= args.tau <= 1:
         parser.error("--tau must lie between 0 and 1")
+    if args.samples < 0:
+        parser.error("--samples must be >= 0")
 
     # A bare name such as "Scenario2" means Scenarios/Scenario2, even when the
     # current folder happens to contain a folder with that name (e.g. old output).
@@ -61,6 +68,9 @@ def main(argv: list[str] | None = None) -> int:
     settings = {"tau": args.tau, "revise": revise}
     text = format_statistics(compute_statistics(scenario, result.assignments),
                              scenario.name, settings, report)
+    if args.samples > 0:
+        worlds = sample_worlds(world, args.samples, args.seed)
+        text += "\n" + format_monte_carlo(evaluate(scenario, result.assignments, world, worlds), args.seed)
     stats_path.write_text(text, encoding="utf-8")
 
     print(text, end="")

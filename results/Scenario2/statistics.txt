@@ -23,10 +23,18 @@ Unhandled incidents:
 Validation of plan.json: valid (0 errors, 5 warnings)
 
 Definitions (time unit: seconds of simulation time):
- * All times are the world model's expected times, not measured ones.
+ * The numbers above use the world model's expected travel times.
  * Handled: incidents that have a responder in plan.json, also when late.
  * Responders used: responders with at least one task in plan.json.
  * Response time: expected arrival - time the incident became known;
    averaged over the handled incidents only.
  * Deadlines met: incidents reached at or before their deadline, divided
    by all incidents; an unhandled incident counts as a missed deadline.
+
+Monte Carlo (1000 sampled worlds, seed 0): the plan above executed
+in sampled true road states; responders detour around blocked roads.
+ * Deadlines met : 54.6% +- 1.0
+ * Average response time : 41.7 s +- 0.3 (reached incidents)
+ * Incidents not reached : 0.10 per world
+ * P(on time) per incident: I1 0.49, I2 0.38, I3 1.00, I4 0.38, I5 0.64, I6 0.70, I7 0.29, I8 0.61, I9 0.01, I10 0.49, I11 0.86, I12 0.70
+ (+- is the half-width of the 95% confidence interval of the mean.)
