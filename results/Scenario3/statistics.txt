@@ -1,0 +1,36 @@
+System statistics :
+ * 20 incidents handled
+ * 8 responders used
+ * Average response time : 1326.7 s
+ * Deadlines met : 55.0%
+
+Scenario: Scenario3 (20 incidents, 10 responders)
+Settings: tau = 0.5, revise = True
+
+Deadlines met per priority:
+ * Critical: 4/8
+ * High: 5/8
+ * Medium: 2/4
+Late incidents (expected arrival > deadline):
+ * I3: arrives at 2207.1 s, deadline 1550 s
+ * I4: arrives at 655.9 s, deadline 600 s
+ * I5: arrives at 1597.5 s, deadline 1350 s
+ * I6: arrives at 3797.4 s, deadline 2500 s
+ * I14: arrives at 3827.4 s, deadline 3800 s
+ * I15: arrives at 5730.1 s, deadline 5200 s
+ * I16: arrives at 5477.8 s, deadline 5100 s
+ * I17: arrives at 6785.6 s, deadline 6000 s
+ * I19: arrives at 7800.2 s, deadline 7500 s
+Unhandled incidents:
+ * none
+
+Validation of plan.json: valid (0 errors, 9 warnings)
+
+Definitions (time unit: seconds of simulation time):
+ * All times are the world model's expected times, not measured ones.
+ * Handled: incidents that have a responder in plan.json, also when late.
+ * Responders used: responders with at least one task in plan.json.
+ * Response time: expected arrival - time the incident became known;
+   averaged over the handled incidents only.
+ * Deadlines met: incidents reached at or before their deadline, divided
+   by all incidents; an unhandled incident counts as a missed deadline.

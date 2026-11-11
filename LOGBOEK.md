@@ -527,6 +527,183 @@ Beide geven dezelfde score, alleen met meer zoekwerk.
 
 ---
 
+## 2026-11-09: Ontwerpkeuzes stap 4: uitvoer, validator, run.py (brainstorm, geen code)
+
+**Het probleem:** het systeem rekent correct, maar levert nog niet op wat de opdracht vraagt.
+- `plan.json` (5.1);
+- een validator met zelf bedachte controles, getest en met beperkingen (5.1);
+- `statistics.txt` met definities en tijdseenheid (5.2);
+- `run.py` + `README.md` (8.2).
+
+**Vondst:** `Scenarios/README.md` zegt "*no fixed traffic multipliers are prescribed; define and justify*". Onze verkeersfactoren (keuze 3) zijn dus een verwachte eigen keuze.
+
+### Keuze 10: wat controleert de validator? (strenge versie, aanvaard)
+- **Aanleiding:** de student vond het eerste voorstel niet streng genoeg. Bij het nalezen vonden we echte gaten:
+  - een bool of NaN als `time`;
+  - een string als `path`;
+  - een overgeslagen incident dat alleen een waarschuwing gaf;
+  - een dubbelzinnige volgorde bij gelijke tijden.
+- **Werkwijze:** de validator leest het echte `plan.json` en rekent per responder de tijdlijn zelf opnieuw uit, op basis van pad en wegkosten. Hij hergebruikt niets van de planner, meldt alle fouten met een code, en werkt met een tolerantie van 1e-6.
+- **Fouten:**
+  - **Structuur:** S1 geen lijst; S2 niet precies de 4 sleutels; S3 een verkeerd type (een bool, NaN, ∞, een negatieve tijd of een leeg pad).
+  - **Verwijzingen:** R1 onbekende responder; R2 onbekend incident; R3 een incident meer dan één keer; R4 de capability ontbreekt.
+  - **Route:** P1 een onbekende knoop; P2 een onbestaande weg; P3 een geblokkeerde weg (P_B > τ); P4 het pad eindigt niet bij het incident; P5 het pad start niet waar de responder staat.
+  - **Tijd:** T1 vertrek voor de timestamp; T2 vertrek voor `time_until_available`; T3 vertrek voor het einde van de vorige taak; T4 een dubbelzinnige volgorde bij gelijke vertrektijden.
+  - **Volledigheid:** C1 een incident ontbreekt, terwijl een capabele responder het kan bereiken.
+- **Waarschuwingen:**
+  - W1 deadline gemist;
+  - W2 een incident ontbreekt en niemand kan het behandelen;
+  - W3 de route is duurder dan de kortste;
+  - W4 nodeloos wachten.
+- **Grensgevallen:**
+  - C1 is een fout: ons systeem belooft iedereen hulp;
+  - W1 blijft een waarschuwing (keuze 4). Anders is elk plan in S2/S3 ongeldig;
+  - W3/W4 blijven waarschuwingen: de opdracht vraagt "*suitable*", niet "*shortest*".
+- **Beperkingen:**
+  - hetzelfde wereldmodel als de planner (P3, W3);
+  - de verwachte aankomst, niet de echte;
+  - geen controle op optimaliteit;
+  - toekomstkennis alleen ten dele (T1).
+
+### Keuze 11: grensgevallen (aanvaard)
+- Een weg gebruiken met P(Blocked) > τ is een **fout**. De opdracht zegt "*Blocked — the road cannot be used*", en τ is onze definitie van "blocked".
+- Een duurdere route dan de kortste is een **waarschuwing**: geldig, maar suboptimaal.
+
+### Keuze 12: `statistics.txt` (aanvaard)
+- **Verplicht:**
+  - behandeld = het aantal incidenten in het plan, ook de te late;
+  - gebruikte responders = responders met minstens één taak;
+  - gemiddelde responstijd = aankomst − timestamp, over de behandelde incidenten, in seconden;
+  - % deadlines gehaald = gehaald / *alle* incidenten (onbehandeld telt als gemist).
+- **Extra:**
+  - deadlines per prioriteit;
+  - de onbehandelde en te late incidenten;
+  - het resultaat van de validator;
+  - de instellingen (τ, `revise`);
+  - een korte uitleg van de definities.
+- Monte Carlo-cijfers komen pas in stap 5.
+
+### Keuze 13: `run.py` (aanvaard)
+- `python run.py [scenariomap]`. Zonder argument draait het Scenario1.
+- Opties: `--out DIR` (standaard de huidige map), `--no-revise`, `--tau`.
+- Waarschuwingen worden afgedrukt.
+- Exitcode ≠ 0 bij kapotte data of een ongeldig plan.
+- Alleen de standaardbibliotheek.
+
+### Keuze 14: `plan.json` (aanvaard)
+- Precies de 4 sleutels uit het voorbeeld. Een automatische checker kan struikelen over extra velden.
+- `time` wordt niet afgerond (fractionele seconden zijn toegelaten).
+- Gesorteerd op vertrektijd, dan op responder.
+- Onbehandelde incidenten staan niet in het plan, wel in de statistieken.
+
+**Opsplitsing:**
+- **4a:** `plan.json` + validator, met tests.
+- **4b:** statistieken + `run.py` + `README.md`, met tests. Dan wordt ook `main.py` verwijderd.
+
+---
+
+## 2026-11-09: Stap 4a: `plan.json` + validator (`emergency/plan/`)
+
+**Wat:**
+- **`plan_json.py`** (ongeveer 20 lijnen): `plan_entries` en `write_plan`. Precies de 4 sleutels, en `time` = het vertrek, niet afgerond.
+- **`validator.py`** (ongeveer 190 lijnen, waarvan ongeveer 30 de docstring met alle codes):
+  - `validate_plan(data, scenario, world)` en `validate_plan_text(text, ...)` geven een `ValidationReport` (fouten en waarschuwingen, elk met een code).
+
+**Keuzes tijdens het bouwen:**
+| Keuze | Waarom |
+|---|---|
+| De tijdlijn per responder wordt zelf opnieuw berekend (sorteren op vertrek, dan locatie en vrije tijd volgen), uit pad en wegkosten | Onafhankelijk van de planner, zodat een fout in de planner niet stil herhaald wordt |
+| Na een niet-berijdbare route (P1/P2/P3) worden de latere tijdscontroles van die responder overgeslagen | De aankomst is dan onbekend. Anders komen er vervolgfouten die niets zeggen |
+| **W4 precies gedefinieerd:** vertrek is later dan "vrij" **en** valt niet samen met een event (een timestamp ≥ die van het incident) | Bij `revise=True` kan een taak legitiem pas op een later event vertrekken. Een naïeve "vertrek > vrij" zou daar valse waarschuwingen geven |
+| **C1 kijkt naar bereikbaarheid vanaf de startlocatie** | Dat is exact. Een latere locatie van een responder is zelf bereikbaar vanaf zijn start, dus wat vanaf de start onbereikbaar is, blijft overal onbereikbaar |
+| **W3 gebruikt UCS uit `emergency/search`** | Dat is geen plannercode en het is apart getest. Het blijft een waarschuwing |
+
+**Gecontroleerd:**
+- Alle plannen (3 scenario's × A/B) zijn geldig.
+- De enige waarschuwingen zijn W1, precies één per te laat incident. Er zijn geen valse W3/W4.
+
+**Tests** (`tests/test_plan.py`, 39 tests):
+- het formaat van `plan.json`;
+- alle gegenereerde plannen zijn geldig;
+- **25 beschadigingen** van een geldig S1-plan, elk met de **exacte verzameling** foutcodes die verwacht wordt. Bijvoorbeeld:
+  - een dubbel incident geeft R3 + P5 + T4, want de kopie start waar het origineel eindigde, en op hetzelfde moment;
+  - een weggelaten of misvormd item geeft ook C1, want het incident ontbreekt dan.
+- de volgorde in het bestand maakt niet uit;
+- ongeldige JSON;
+- de vier waarschuwingen houden het plan geldig.
+
+**Mutatietest:** 19 bugs in de validator, **19/19 opgemerkt**. Eerst werd er één gemist: "taken in bestandsvolgorde in plaats van tijdsvolgorde". Ons eigen plan staat al op tijd gesorteerd, dus geen test zag het verschil. Daarvoor is de test met een omgekeerd plan toegevoegd.
+
+**Resultaat:** 162 tests slagen.
+
+---
+
+## 2026-11-09: Stap 4b: `statistics.txt`, `run.py`, `README.md`
+
+**Wat:**
+- **`emergency/plan/statistics.py`** (ongeveer 100 lijnen):
+  - `compute_statistics(scenario, assignments)` geeft een `Statistics` met de 4 verplichte cijfers, deadlines per prioriteit, de te late incidenten en de onbehandelde incidenten;
+  - `format_statistics(...)` maakt de tekst. Bovenaan staat precies het blok uit het voorbeeld van de opdracht (5.2), daaronder de extra's van keuze 12 en de definities.
+- **`run.py`** (ongeveer 70 lijnen): `python run.py [SCENARIO] [--out DIR] [--no-revise] [--tau TAU]`.
+  - Laadt het scenario, bouwt het wereldmodel, plant, schrijft `plan.json`, **leest het terug van schijf en valideert het**, en schrijft dan `statistics.txt`.
+  - Exitcode 0 = geldig plan, 1 = ongeldig plan (`statistics.txt` wordt toch geschreven, met de fouten erin), 2 = kapotte data of foute argumenten.
+- **`README.md`**: installatie, gebruik, uitvoer, exitcodes, structuur, tests.
+- **`main.py`** (het PyCharm-voorbeeld) is verwijderd.
+
+**Keuzes tijdens het bouwen:**
+| Keuze | Waarom |
+|---|---|
+| De statistieken komen uit de toewijzingen van de planner; de validator controleert ze onafhankelijk | De W1-test van 4a bewijst al dat de validator precies dezelfde te late incidenten vindt |
+| Onbehandeld = incidenten van het scenario die niet in het plan staan (niet de lijst van de planner) | Robuuster: zo telt alles wat in het plan ontbreekt, wat de oorzaak ook is |
+| W1 staat niet nog eens bij de validatie-waarschuwingen | Ze staan al in de lijst "Late incidents"; anders staat alles dubbel |
+| Een kale naam (`Scenario2`) betekent altijd `Scenarios/Scenario2` | **Gevonden bij het testen:** een oude uitvoermap `Scenario2` in de huidige map won eerst van de echte scenariomap, met een verwarrende foutmelding. Een pad (`Scenarios/Scenario2`, `./mijnmap`) werkt nog altijd |
+| `--tau` moet tussen 0 en 1 liggen | Een kans; buiten [0, 1] betekent het niets |
+
+**Gecontroleerd met de hand:**
+- S1: 7 behandeld, 4 responders, 107,4 s, 71,4% (5/7). I6 en I7 te laat, zoals in 3a.
+- S2: 12 behandeld, 8 responders, 39,1 s, 58,3% (7/12).
+- S3: 20 behandeld, 8 responders, 1326,7 s, 55,0% (11/20); met `--no-revise` 50,0% (10/20).
+  - De gemiddelde responstijd lijkt enorm, maar S3 werkt op een andere tijdschaal: deadlines tot 7500 s, I8 (timestamp 360) heeft bv. een deadline van 3000.
+- `--tau 0` op S2: bijna elke weg is dan "geblokkeerd", 11 incidenten onbehandeld, 8,3%. Het plan is geldig (alleen W2), dus exitcode 0. Correct: niemand kan die incidenten bereiken.
+- Een onbestaand scenario geeft exitcode 2; `--tau 2` geeft een gebruiksfout.
+- `run.py` werkt ook vanuit een andere map.
+
+**Tests:** zie de volgende sectie.
+
+---
+
+## 2026-11-09: Testsuite voor stap 4b (`tests/test_run.py`)
+
+**Aanpak:**
+- De statistieken worden getest op **met de hand gemaakte toewijzingen** voor de incidenten van S1, niet op de uitvoer van de planner. Zo test elke test precies één definitie van keuze 12, los van de planner.
+- `run.py` wordt via `main([...])` opgeroepen, met de uitvoer in een tijdelijke map.
+
+**Tests** (19):
+- **Statistieken:**
+  - een geval met de hand nagerekend: responstijd vanaf de timestamp (I5 komt pas op 50 binnen), I2 komt exact op de deadline aan en telt als gehaald;
+  - onbehandeld telt als gemist (gedeeld door **alle** incidenten), maar telt niet mee in de responstijd en staat niet bij "te laat";
+  - de grens van de deadline (60 gehaald, 60,001 niet);
+  - deadlines per prioriteit, alleen voor prioriteiten die voorkomen;
+  - niets behandeld: geen deling door nul, "n/a";
+  - het echte S1-plan: 7 / 4 / 107,37 s / 5 op tijd, I6 en I7 te laat.
+- **Tekst:**
+  - de eerste 5 lijnen zijn letterlijk het blok uit het voorbeeld van de opdracht;
+  - fouten van de validator staan erin, W1 niet dubbel.
+- **`run.py`:**
+  - schrijft een geldig plan + statistieken, standaard Scenario1;
+  - de opties `--no-revise`, `--tau` en `--out` (de map wordt aangemaakt);
+  - een kale naam wint van een lokale map met dezelfde naam (de fout uit 4b);
+  - een pad naar een scenariomap werkt;
+  - een onbestaand scenario geeft exitcode 2 en schrijft niets;
+  - een foute `--tau` geeft een gebruiksfout;
+  - een ongeldig plan geeft exitcode 1 (de planner wordt vervangen door een die één incident laat vallen), en `statistics.txt` bevat dan "INVALID" en C1.
+
+**Mutatietest:** 21 bugs ingebouwd in `statistics.py` en `run.py`; 20 opgemerkt. De ene "gemiste" is een **equivalente mutant**: hij herschrijft de voorwaarde van de te late lijst zodat ze logisch hetzelfde is. Geen test kan dat opmerken. Echte score: **20/20**.
+
+**Resultaat:** 181 tests slagen.
+
+---
+
 ## Open punten / volgende stappen
 - [x] Tests voor het wereldmodel (met de hand nagerekende gevallen).
 - [x] Stap 2: UCS één-naar-allen per bron (keuze B).
@@ -535,8 +712,10 @@ Beide geven dezelfde score, alleen met meer zoekwerk.
 - [x] Stap 3a: CSP met ketens + event-loop, `revise=False`.
 - [x] Tests voor 3a (24 tests, mutaties 19/19 opgemerkt).
 - [x] Stap 3b: `revise=True` getest. B is per event nooit slechter, maar globaal soms wel (kortzichtigheid).
-- [ ] Stap 4: validator, statistieken en `run.py`.
+- [x] Stap 4a: `plan.json` + validator (39 tests, mutaties 19/19).
+- [x] Stap 4b: statistieken + `run.py` + `README.md`.
+- [x] Tests voor 4b (19 tests, mutaties 20/20).
 - [ ] Stap 5: Monte Carlo-evaluatie en gevoeligheidsanalyse (τ, weer, stationaire verdeling).
 - [ ] Kostenmodel fijnregelen (vooral de verkeersfactor), maar beoordeeld met Monte Carlo en niet met het eigen percentage "op tijd", dat zelfreferentieel is.
 - [ ] Later, als er tijd is: optie 4 (risicotoeslag) en optie 5 (weer afleiden).
-- [ ] `main.py` (het PyCharm-voorbeeld) verwijderen zodra `run.py` er is.
+- [x] `main.py` (het PyCharm-voorbeeld) verwijderd.
