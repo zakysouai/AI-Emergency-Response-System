@@ -1,0 +1,274 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2cm]{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+
+\setlist{itemsep=2pt, topsep=4pt}
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+
+\newcommand{\repo}{\url{https://github.com/zakysouai/AI-Emergency-Response-System}}
+
+\begin{document}
+
+% ------------------------------------------------------------------ title page
+\begin{titlepage}
+  \centering
+  \vspace*{4cm}
+  {\LARGE\bfseries Emergency Response System\par}
+  \vspace{0.4cm}
+  {\large Artificial Intelligence Practicum, University of Antwerp\par}
+  \vspace{2cm}
+  {\large\bfseries GitHub repository\par}
+  \vspace{0.2cm}
+  {\large \repo\par}
+  \vspace{2cm}
+  {\large NAME STUDENT -- student number\par}
+  \vspace{0.3cm}
+  {\large 12 November 2026\par}
+  \vfill
+\end{titlepage}
+
+% ------------------------------------------------------------------ content
+\section{What the system does}
+
+After a storm, emergency responders (ambulances, police and fire trucks) have to
+be sent to incidents in a city. Roads may be open, congested or blocked, but we
+do not know this for sure: we only get noisy reports and traffic observations.
+Our system decides which responder goes to which incident, which route it takes
+and when it leaves. Running \texttt{python3 run.py Scenario1} writes
+\texttt{plan.json} (the plan) and \texttt{statistics.txt} (how good the plan is).
+The README explains how to install and run everything.
+
+\section{How the system works}
+
+The system has four AI parts. Each part passes its result to the next one.
+
+\begin{enumerate}
+  \item \textbf{Bayesian reasoning: how likely is a road blocked?}
+    For every road we combine the weather with the reports of citizens, police
+    and sensors. This gives a probability for Open, Congested and Blocked. For a
+    road without any reports we do not know the weather, so we average over all
+    possible weathers. Such a road then has a 13.5\% chance of being blocked.
+  \item \textbf{Hidden Markov model: how busy is a road?}
+    For the roads with traffic observations, we use the forward algorithm to
+    estimate the current traffic level (low, medium or high). Roads without
+    observations get the starting distribution from the data.
+  \item \textbf{Search: what is the fastest route?}
+    From the two results above, every road gets an expected travel time. A road
+    that is more likely blocked than open is not used. Then uniform-cost search
+    (UCS) finds the fastest route between all important places in the city.
+  \item \textbf{Constraint-based allocation: who goes where?}
+    Incidents appear over time, and the system does not know the future. Every
+    time a new incident appears, we solve a small constraint problem: a
+    responder must have the right capability, must be able to reach the
+    incident and can only do one task at a time. Among all valid plans, we pick
+    the one that meets the most deadlines, with the most urgent incidents
+    first, and then the shortest response times. A responder can get several
+    tasks in a row, and tasks that have not started yet can be changed when a
+    new incident appears.
+\end{enumerate}
+
+\textbf{Main assumptions.} Where the assignment left things open, we made our
+own choices and wrote them down: high traffic makes a road 1.5 times slower
+(medium 1.2 times); a responder stays at the incident after finishing it; and an
+incident that is reached too late still gets help, because in real life you
+also send help when you are late.
+
+\section{How we built it together with the LLM}
+
+We used \textbf{Claude} (made by Anthropic) through the \textbf{Claude Code}
+desktop app. It explained concepts, proposed designs, wrote the code and the
+tests, and helped with debugging. The exact first prompt is prompt P1 on the
+last page: I asked it to read the assignment and split it into parts that we
+could build one by one.
+
+\textbf{Our way of working.} After the first part, I set a few rules (prompt P2):
+\begin{itemize}
+  \item first we \emph{brainstorm} without code: the LLM lists the options with
+    their pros and cons, and I choose;
+  \item then the LLM writes at most about 200 lines of code, so every step stays
+    small enough for me to read and understand;
+  \item tests are written as a separate step;
+  \item after every step, the LLM updates a logbook (\texttt{LOGBOEK.md}) with what
+    we made, which choices we made, why, and which mistakes were found;
+  \item I commit the code myself, after reading it.
+\end{itemize}
+So we built the system in small steps: reading the data, the world model
+(Bayes and HMM), the search, the allocation, the output and its checks, and
+finally an evaluation.
+
+\textbf{Moments where I steered the LLM.}
+\begin{itemize}
+  \item \textbf{A* or UCS?} The LLM first proposed A*, because it is the ``best''
+    search algorithm. I asked why we need A* if the assignment does not require
+    it (P3). We measured both: our system needs the travel time between
+    \emph{all} places, and for that one UCS run per place is clearly cheaper. So
+    we chose UCS and did not build A*.
+  \item \textbf{Changing tasks that have not started yet.} The LLM advised not to
+    do this, because the gain looked small. I disagreed (P4): it can help in
+    bigger cases. We built it as an option, and later measured that it really
+    meets more deadlines in Scenario 3.
+  \item \textbf{A stricter check of the plan.} I found the first design for
+    checking plans not strict enough (P6). When we looked again, we found real
+    holes, for example an incident that was left out of the plan and only gave
+    a warning instead of an error.
+  \item \textbf{The low percentage of deadlines met.} I worried that our model was
+    not good enough (P5). Instead of just tuning numbers until the result looked
+    better, we analysed where the deadlines were lost (see Section 5).
+\end{itemize}
+
+\textbf{Mistakes of the LLM that we caught.} It wrote tests with wrong
+assumptions about the data (for example a road that does not exist). It once
+used the traffic numbers of Scenario 1 to check Scenario 2. It also claimed a
+maximum number of deadlines that turned out to be wrong. Most importantly, its
+first tests were all green but still missed real bugs (see below). That taught
+me that green tests written by the same LLM that wrote the code do not prove
+much on their own.
+
+\section{How we checked that it works}
+
+When I asked how I could be sure everything was correct (P7), we started
+checking every part in several independent ways.
+
+\begin{itemize}
+  \item \textbf{Hand-calculated tests.} The expected answer of a test is written
+    out as a calculation with the numbers from the data files, so I can check it
+    on paper. In total there are 220 automatic tests, and they all pass.
+  \item \textbf{Comparing with a simple, slow method.} The search was compared
+    with another shortest-path algorithm (Bellman--Ford), and every allocation
+    decision with trying all possible combinations. They always gave the same
+    answer.
+  \item \textbf{Breaking the code on purpose (mutation testing).} We put 141
+    small bugs into the code on purpose, for example a \texttt{>} instead of a
+    \texttt{>=}, and checked whether the tests notice. At first 12 bugs were
+    not noticed. We then added tests until all of them were caught, except 2
+    that do not change the behaviour at all.
+  \item \textbf{Checking the plan itself.} After writing \texttt{plan.json},
+    \texttt{run.py} reads it back and checks it independently of the planner:
+    does the responder have the right capability, does the route exist and
+    avoid blocked roads, does nobody leave before an incident is known or do two
+    tasks at once, and is no incident forgotten? All plans pass. To test the
+    checker, we damaged a valid plan in 25 different ways, and every damage was
+    found.
+  \item \textbf{Simulating the real roads (Monte Carlo).} The percentage in
+    \texttt{statistics.txt} is what our own model \emph{expects}. To test the
+    plan, we drew 1000 possible ``real'' cities from our probabilities and let
+    the responders drive the plan. If a road turns out to be blocked, the
+    responder looks for another route.
+\end{itemize}
+
+\textbf{Results.} Times are in seconds of simulation time. An incident that is
+not handled counts as a missed deadline.
+
+\begin{center}
+\begin{tabular}{lcccc}
+  \toprule
+  & & average & deadlines met & deadlines met \\
+  & handled & response time & (expected) & (simulated) \\
+  \midrule
+  Scenario 1 & 7/7   & 107.4 s  & 71.4\% & 50.2\% \\
+  Scenario 2 & 12/12 & 39.1 s   & 58.3\% & 54.6\% \\
+  Scenario 3 & 20/20 & 1326.7 s & 55.0\% & 42.7\% \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\section{What we learned and what I would improve}
+
+\textbf{The expected percentage is too optimistic.} In the simulation, fewer
+deadlines are met than expected, in Scenario 1 about 20 percentage points fewer.
+The main reason is blocked roads: our travel time assumes a road is open, and
+only ignores a road when it is \emph{more likely} blocked than open. Most roads
+have no reports and a 13.5\% chance of being blocked, so a route over several
+of them often runs into a blocked road.
+
+\textbf{The low percentage is not caused by the planning algorithm.} We also ran
+a planner that knows all incidents in advance. In Scenarios 1 and 2 it does not
+do better than ours; in Scenario 3 it meets 3 more deadlines, which is the price
+of not knowing the future. The percentage mainly depends on our own assumption
+about traffic. As a test, we let the same system plan again as if traffic never
+slows a road down. Its \emph{prediction} for Scenario 2 then rises from 7 to 11
+deadlines out of 12. Our real plan still meets 7 out of 12: the roads did not
+change, only our assumption became more optimistic. Removing the traffic
+slowdown just to get a better number would be cheating, so we kept it.
+
+\textbf{Some surprises.}
+\begin{itemize}
+  \item Changing tasks that have not started helps in Scenario 3 (3 percentage
+    points more deadlines in the simulation), but it can also be short-sighted:
+    it does not look at where a responder ends up for later incidents.
+  \item There is no single best threshold for ``blocked''. Sometimes a risky
+    road is a good choice, because there is an easy detour if it is blocked.
+  \item The biggest uncertainty is our guess about the weather on roads without
+    reports. If it is a storm there, Scenario 3 drops to 17\%.
+\end{itemize}
+
+\textbf{Limitations.} The simulation uses our own probabilities as the ``truth'',
+so it cannot prove that the probabilities in the data are realistic. The plan
+checker uses the same road model as the planner. And during the simulation,
+responders cannot be reassigned.
+
+\textbf{What I would improve next}, each time checked with the same simulation:
+\begin{enumerate}
+  \item plan for the \emph{chance} of being on time instead of only the expected
+    arrival time;
+  \item include the risk of a blocked road (and the detour) in the cost of a
+    road;
+  \item estimate the weather of roads without reports from nearby reports.
+\end{enumerate}
+
+\textbf{About working with the LLM.} The LLM was fast and good at explaining
+theory, writing small pieces of code and many tests. But it did not always check
+its own assumptions, and it was sometimes too confident. Working in small steps,
+asking ``why?'' and checking everything with tests and measurements made the
+difference. Everything we decided is in the logbook in the repository.
+
+% ------------------------------------------------------------------ prompt page
+\newpage
+\section*{LLM prompts}
+
+All prompts were sent to Claude in Claude Code, in Dutch. They are quoted
+exactly, with an English translation.
+
+\newcommand{\prompt}[3]{%
+  \par\noindent\textbf{#1}\par
+  \noindent\textit{``#2''}\par
+  \noindent\textcolor{darkgray}{#3}\par\medskip}
+
+\prompt{P1 -- first relevant prompt (8 Nov 2026)}
+  {lees eerst de assignment van de taak en breek het helemaal in stukjes en componenten die we apart kunnen behandelen/maken}
+  {First read the assignment and break it down completely into pieces and components that we can handle/build separately.}
+
+\prompt{P2 -- way of working (9 Nov 2026)}
+  {oke, ik heb de data layer gecommit. Ik wil dat we nu even stilstaan en kritisch nadenken over wat er next nodig is, geen slop. Alleen relevante en belangrijke dingen. Om slop en excessive code te vermijden, wil ik dat je per keer max rond de 200 lijnen code schrijft zodat we concise en focussed blijven en geen domme dingen schrijven. We hebben de data layer net afgewerkt. Het is nu tijd om te denken aan de volgende stap. Schrijf nog geen code, alleen brainstormen}
+  {I committed the data layer. Let's stop and think critically about what is needed next, no slop, only relevant things. Write at most about 200 lines of code at a time so we stay concise and focused. Write no code yet, only brainstorm.}
+
+\prompt{P3 -- A* or UCS (9 Nov 2026)}
+  {waarom moeten we dat via A* berekenen? is dit vermeld in de opdracht?}
+  {Why do we have to compute that with A*? Does the assignment say so?}
+
+\prompt{P4 -- changing tasks that have not started (9 Nov 2026)}
+  {ja maar optie B lijkt me beter omdat we dit misschien ook kunnen gebruiken op grotere schalen waar het wel nodig zou zijn, want hoe ik het zie. bij optie B hebben we lett gwn optie A maar dan met extra checks om te zien of er een betere situatie is. vind je ni? geen yes man zijn en gewoon akkoord gaan, wees kritisch.}
+  {Option B seems better, because we might use it at larger scales where it is needed. As I see it, B is option A with extra checks for a better situation. Don't you agree? Don't be a yes-man, be critical.}
+
+\prompt{P5 -- low percentage of deadlines met (9 Nov 2026)}
+  {de 'op tijd' rate lijkt me echt enorm laag, ons model is niet goed genoeg vrees ik}
+  {The on-time rate seems really low; I fear our model is not good enough.}
+
+\prompt{P6 -- strict checking of plans (9 Nov 2026)}
+  {ik ga akkoord met alle keuzes buiten miss keuze 10, ik wil echt dat we strikt genoeg zijn over faulty plannen}
+  {I agree with all choices except maybe choice 10; I really want us to be strict enough about faulty plans.}
+
+\prompt{P7 -- correctness (8 Nov 2026)}
+  {hoe kan ik zeker zijn dat hoe je dit hebt gemaakt allemaal correct is?}
+  {How can I be sure that what you built is all correct?}
+
+\end{document}

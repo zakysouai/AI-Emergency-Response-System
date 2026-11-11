@@ -87,6 +87,7 @@ emergency/evaluation/   Monte Carlo evaluation of a plan
 tests/                  pytest test suite
 Scenarios/              the three given scenarios
 LOGBOEK.md              development log (Dutch): choices, alternatives, LLM use
+report/report.tex       the report (LaTeX, compiled on Overleaf)
 ```
 
 ## Tests

@@ -884,6 +884,25 @@ Beide geven dezelfde score, alleen met meer zoekwerk.
 
 ---
 
+## 2026-11-11: Verslag (`report/report.tex`)
+
+**Eerste versie** (Typst): volledig, maar volgens de student **te technisch** (formules, foutcodes, veel cijfers). Weggegooid.
+
+**Tweede versie** (LaTeX, de student compileert zelf op Overleaf): eenvoudig en vlot leesbaar, in het Engels zoals de opdracht. Titelpagina + 3 inhoudspagina's + 1 promptpagina.
+- *What the system does / How the system works:* de vier AI-onderdelen in gewone taal, en de belangrijkste aannames.
+- *How we built it together with the LLM:* de werkwijze (brainstorm, max. ~200 lijnen, tests apart, logboek, de student commit), de momenten waarop de student bijstuurde (A\* of UCS, herzien, strengere validator, lage rate) en de fouten van de LLM.
+- *How we checked that it works:* tests met handberekeningen, vergelijken met een trage methode, mutatietests, de validator, Monte Carlo, en een tabel met de resultaten.
+- *What we learned and what I would improve:* waarom het voorspelde percentage te hoog is, verrassingen, beperkingen, drie verbeteringen.
+- *Prompts P1–P7:* exact geciteerd, met vertaling.
+
+Het experiment met basistijden en de vergelijking met medestudenten staan er **niet** in (niet reproduceerbaar met de repo).
+
+**Rechtgezet na een vraag van de student:** de zin "Scenario 2: 11 instead of 7 out of 12" las alsof ons systeem 11/12 haalt. Ons plan haalt altijd 7/12. 11/12 is de *voorspelling* van hetzelfde systeem als het opnieuw plant zonder verkeersfactor (opnieuw nagerekend: S1 6/7, S2 11/12, S3 13/20, analyse "Waar gaan de deadlines verloren?"). De zin zegt dat nu expliciet.
+
+**Nog te doen door de student:** naam en studentennummer invullen (`NAME STUDENT`), op Overleaf compileren en nakijken dat de inhoud op 3 pagina's past, indienen als `report.pdf`, en beide assistenten uitnodigen op de repo.
+
+---
+
 ## Open punten / volgende stappen
 - [x] Tests voor het wereldmodel (met de hand nagerekende gevallen).
 - [x] Stap 2: UCS één-naar-allen per bron (keuze B).
@@ -900,7 +919,7 @@ Beide geven dezelfde score, alleen met meer zoekwerk.
 - [x] Tests voor 5a (24 tests, mutaties 23/24, de overblijvende is equivalent).
 - [x] Stap 5b: `evaluate.py` (gevoeligheidsanalyse: τ, revise, stationaire verdeling, Storm).
 - [x] Tests voor 5b (15 tests, mutaties 15/15).
-- [ ] Verslag (3 pagina's + promptpagina).
+- [x] Verslag (3 pagina's + promptpagina): `report/report.tex`. Naam invullen en compileren op Overleaf.
 - [ ] ~~Kostenmodel fijnregelen~~: laten vallen wegens tijd (keuze 19); komt in het verslag als voorgestelde verbetering, te beoordelen met Monte Carlo.
 - [ ] Later, als er tijd is: optie 4 (risicotoeslag) en optie 5 (weer afleiden).
 - [x] `main.py` (het PyCharm-voorbeeld) verwijderd.
