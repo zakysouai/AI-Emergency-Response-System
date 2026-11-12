@@ -70,7 +70,7 @@ def test_nothing_handled(s1):
     stats = compute_statistics(s1, [])
     assert (stats.handled, stats.responders_used, stats.met) == (0, 0, 0)
     assert stats.average_response is None and stats.met_percentage == 0
-    assert "Average response time : n/a" in format_statistics(stats, "S", {}, ValidationReport((), ()))
+    assert "Average response time: n/a" in format_statistics(stats, "S", {}, ValidationReport((), ()))
 
 
 def test_scenario1_plan(s1):
@@ -89,11 +89,11 @@ def test_text_starts_with_the_block_of_the_assignment(s1):
     stats = compute_statistics(s1, [task("R1", "I1", 70), task("R2", "I2", 95)])
     text = format_statistics(stats, "Scenario1", {"tau": 0.5}, ValidationReport((), ()))
     assert text.splitlines()[:5] == [
-        "System statistics :",
+        "System statistics:",
         " * 2 incidents handled",
         " * 2 responders used",
-        " * Average response time : 82.5 s",
-        " * Deadlines met : 14.3%",
+        " * Average response time: 82.5 s",
+        " * Deadlines met: 14.3%",
     ]
     assert "Settings: tau = 0.5" in text and "seconds" in text
 
@@ -118,12 +118,12 @@ def test_run_writes_a_valid_plan_and_statistics(tmp_path):
     plan = json.loads((tmp_path / "plan.json").read_text())
     assert validate_plan(plan, s, build_world(s)).valid and len(plan) == 7
     text = (tmp_path / "statistics.txt").read_text()
-    assert " * Deadlines met : 71.4%" in text and "revise = True" in text
+    assert " * Deadlines met: 71.4%" in text and "revise = True" in text
 
 
 @pytest.mark.parametrize("args, line", [
-    (["Scenario3"], " * Deadlines met : 55.0%"),
-    (["Scenario3", "--no-revise"], " * Deadlines met : 50.0%"),
+    (["Scenario3"], " * Deadlines met: 55.0%"),
+    (["Scenario3", "--no-revise"], " * Deadlines met: 50.0%"),
     (["Scenario2", "--tau", "0"], " * 1 incidents handled"),  # almost every road counts as blocked
 ])
 def test_run_options(tmp_path, args, line):

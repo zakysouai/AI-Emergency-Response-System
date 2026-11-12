@@ -1,8 +1,8 @@
-System statistics :
+System statistics:
  * 20 incidents handled
  * 8 responders used
- * Average response time : 1326.7 s
- * Deadlines met : 55.0%
+ * Average response time: 1326.7 s
+ * Deadlines met: 55.0%
 
 Scenario: Scenario3 (20 incidents, 10 responders)
 Settings: tau = 0.5, revise = True
@@ -37,8 +37,8 @@ Definitions (time unit: seconds of simulation time):
 
 Monte Carlo (1000 sampled worlds, seed 0): the plan above executed
 in sampled true road states; responders detour around blocked roads.
- * Deadlines met : 42.7% +- 0.6
- * Average response time : 1497.1 s +- 21.7 (reached incidents)
- * Incidents not reached : 3.40 per world
+ * Deadlines met: 42.7% +- 0.6
+ * Average response time: 1497.1 s +- 21.7 (reached incidents)
+ * Incidents not reached: 3.40 per world
  * P(on time) per incident: I1 0.73, I2 0.78, I3 0.00, I4 0.06, I5 0.06, I6 0.00, I7 0.54, I8 0.51, I9 0.68, I10 0.64, I11 1.00, I12 0.86, I13 0.64, I14 0.28, I15 0.01, I16 0.01, I17 0.01, I18 0.74, I19 0.16, I20 0.84
  (+- is the half-width of the 95% confidence interval of the mean.)

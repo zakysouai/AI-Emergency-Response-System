@@ -311,3 +311,19 @@ def test_uncovered_capability_is_a_warning(scenario_copy):
     _replace(scenario_copy / "incidents.csv", "Medical emergency", "Bomb disposal")
     s = load_scenario(scenario_copy)
     assert any("Bomb disposal" in w for w in s.warnings)
+
+
+def test_busy_without_waiting_time_is_a_warning(scenario_copy):
+    # R4 is Busy; an empty time_until_available is read as 0, but not silently.
+    _replace(scenario_copy / "responders.csv", "Busy,10", "Busy,")
+    s = load_scenario(scenario_copy)
+    assert next(r for r in s.responders if r.id == "R4").available_from == 0
+    assert any("R4" in w and "Busy" in w for w in s.warnings)
+
+
+def test_second_report_of_the_same_source_is_a_warning(scenario_copy):
+    path = scenario_copy / "road_reports.csv"
+    path.write_text(path.read_text().rstrip("\n") + "\nN1,N2,Rain,Police,Blocked\n")
+    s = load_scenario(scenario_copy)
+    assert len(s.road_evidence[("N1", "N2")].reports) == 4  # still used as evidence
+    assert any("second Police report for N1->N2" in w for w in s.warnings)

@@ -212,6 +212,8 @@ def load_responders(path: Path, graph: Graph, warnings: list[str]) -> tuple[Resp
                 warnings.append(f"{where}: {rid} is 'Available' but has time_until_available={wait}; using 0")
             available_from = 0.0
         elif row["availability"] == "Busy":
+            if not row["time_until_available"]:
+                warnings.append(f"{where}: {rid} is 'Busy' without time_until_available; using 0")
             available_from = wait
         else:
             raise DataError(f"{where}: availability {row['availability']!r} is not 'Available' or 'Busy'")
@@ -258,7 +260,7 @@ def load_incidents(path: Path, graph: Graph, warnings: list[str]) -> tuple[Incid
     return tuple(sorted(incidents.values(), key=lambda inc: (inc.timestamp, inc.id)))
 
 
-def load_road_reports(path: Path, graph: Graph) -> dict[Edge, RoadEvidence]:
+def load_road_reports(path: Path, graph: Graph, warnings: list[str]) -> dict[Edge, RoadEvidence]:
     columns = ["from", "to", "weather", "source", "reported_status"]
     weather: dict[Edge, Weather] = {}
     reports: dict[Edge, list[RoadReport]] = defaultdict(list)
@@ -270,10 +272,16 @@ def load_road_reports(path: Path, graph: Graph) -> dict[Edge, RoadEvidence]:
         # of one road must agree on it.
         if weather.setdefault(edge, road_weather) != road_weather:
             raise DataError(f"{where}: conflicting weather for road {edge[0]}->{edge[1]}")
-        reports[edge].append(RoadReport(
+        report = RoadReport(
             source=_parse_enum(ReportSource, row["source"], where),
             reported_status=_parse_enum(RoadStatus, row["reported_status"], where),
-        ))
+        )
+        # Bayes treats every report as independent evidence; a second report of
+        # the same source may well be the same observation counted twice.
+        if any(r.source is report.source for r in reports[edge]):
+            warnings.append(f"{where}: second {report.source.value} report for {edge[0]}->{edge[1]}; "
+                            f"counted as independent evidence")
+        reports[edge].append(report)
     return {edge: RoadEvidence(weather[edge], tuple(reps)) for edge, reps in reports.items()}
 
 
@@ -356,7 +364,7 @@ def load_scenario(folder: str | Path) -> Scenario:
             warnings.append(f"{incident.id}: no responder has capability "
                             f"{incident.required_capability!r}; it cannot be handled")
 
-    road_evidence = load_road_reports(file("road_reports.csv"), graph)
+    road_evidence = load_road_reports(file("road_reports.csv"), graph, warnings)
     road_cpts = load_road_cpts(file("road_probabilities.json"))
     traffic_observations = load_traffic_observations(file("observed_traffic.csv"), graph, warnings)
     hmm = load_hmm(file("traffic_probabilities.json"))

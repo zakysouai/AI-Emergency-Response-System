@@ -109,7 +109,7 @@ def execute(scenario: Scenario, plan: Sequence[Assignment], world: WorldModel,
 
 @dataclass(frozen=True)
 class MonteCarloResult:
-    met: tuple[float, ...]  # % of ALL incidents on time, per sample
+    met: tuple[float, ...]  # % of ALL incidents on time, per sample (empty without incidents)
     response: tuple[float, ...]  # average response time of the reached incidents, per sample
     not_reached: tuple[int, ...]  # incidents in the plan that were not reached, per sample
     p_on_time: dict[str, float]  # incident -> fraction of samples on time
@@ -134,7 +134,8 @@ def evaluate(scenario: Scenario, plan: Sequence[Assignment], world: WorldModel,
                 on_time[inc.id] += 1
             else:
                 late_or_missing += 1
-        met.append(100 * (1 - late_or_missing / len(scenario.incidents)))
+        if scenario.incidents:  # without incidents there is no percentage (as in statistics.py)
+            met.append(100 * (1 - late_or_missing / len(scenario.incidents)))
         times = [arrival[i.id] - i.timestamp for i in scenario.incidents if i.id in arrival]
         if times:
             response.append(statistics.fmean(times))
@@ -144,15 +145,20 @@ def evaluate(scenario: Scenario, plan: Sequence[Assignment], world: WorldModel,
                             {iid: count / n for iid, count in on_time.items()})
 
 
+def _mean_text(values: Sequence[float], unit: str) -> str:
+    if not values:
+        return "n/a"
+    mean, ci = MonteCarloResult.mean_ci(values)
+    return f"{mean:.1f}{unit} +- {ci:.1f}"
+
+
 def format_monte_carlo(result: MonteCarloResult, seed: int) -> str:
-    met, met_ci = result.mean_ci(result.met)
-    resp, resp_ci = result.mean_ci(result.response)
     lines = [
-        f"Monte Carlo ({len(result.met)} sampled worlds, seed {seed}): the plan above executed",
+        f"Monte Carlo ({len(result.not_reached)} sampled worlds, seed {seed}): the plan above executed",
         "in sampled true road states; responders detour around blocked roads.",
-        f" * Deadlines met : {met:.1f}% +- {met_ci:.1f}",
-        f" * Average response time : {resp:.1f} s +- {resp_ci:.1f} (reached incidents)",
-        f" * Incidents not reached : {statistics.fmean(result.not_reached):.2f} per world",
+        f" * Deadlines met: {_mean_text(result.met, '%')}",
+        f" * Average response time: {_mean_text(result.response, ' s')} (reached incidents)",
+        f" * Incidents not reached: {statistics.fmean(result.not_reached):.2f} per world",
         " * P(on time) per incident: " + ", ".join(f"{iid} {p:.2f}" for iid, p in result.p_on_time.items()),
         " (+- is the half-width of the 95% confidence interval of the mean.)",
     ]

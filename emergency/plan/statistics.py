@@ -67,11 +67,11 @@ def format_statistics(stats: Statistics, scenario_name: str, settings: dict[str,
     average = "n/a" if stats.average_response is None else f"{stats.average_response:.1f} s"
     percentage = "n/a" if stats.met_percentage is None else f"{stats.met_percentage:.1f}%"
     lines = [
-        "System statistics :",
+        "System statistics:",
         f" * {stats.handled} incidents handled",
         f" * {stats.responders_used} responders used",
-        f" * Average response time : {average}",
-        f" * Deadlines met : {percentage}",
+        f" * Average response time: {average}",
+        f" * Deadlines met: {percentage}",
         "",
         f"Scenario: {scenario_name} ({stats.incidents} incidents, {stats.responders} responders)",
         "Settings: " + ", ".join(f"{k} = {v}" for k, v in settings.items()),

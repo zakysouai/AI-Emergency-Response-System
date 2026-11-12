@@ -30,7 +30,7 @@
   \vspace{0.2cm}
   {\large \repo\par}
   \vspace{2cm}
-  {\large NAME STUDENT -- student number\par}
+  {\large Zaky Souai -- 20226844\par}
   \vspace{0.3cm}
   {\large 12 November 2026\par}
   \vfill
@@ -63,7 +63,7 @@ The system has four AI parts. Each part passes its result to the next one.
     observations get the starting distribution from the data.
   \item \textbf{Search: what is the fastest route?}
     From the two results above, every road gets an expected travel time. A road
-    that is more likely blocked than open is not used. Then uniform-cost search
+    with more than a 50\% chance of being blocked is not used. Then uniform-cost search
     (UCS) finds the fastest route between all important places in the city.
   \item \textbf{Constraint-based allocation: who goes where?}
     Incidents appear over time, and the system does not know the future. Every
@@ -141,7 +141,7 @@ checking every part in several independent ways.
 \begin{itemize}
   \item \textbf{Hand-calculated tests.} The expected answer of a test is written
     out as a calculation with the numbers from the data files, so I can check it
-    on paper. In total there are 220 automatic tests, and they all pass.
+    on paper. In total there are 223 automatic tests, and they all pass.
   \item \textbf{Comparing with a simple, slow method.} The search was compared
     with another shortest-path algorithm (Bellman--Ford), and every allocation
     decision with trying all possible combinations. They always gave the same
@@ -185,8 +185,8 @@ not handled counts as a missed deadline.
 
 \textbf{The expected percentage is too optimistic.} In the simulation, fewer
 deadlines are met than expected, in Scenario 1 about 20 percentage points fewer.
-The main reason is blocked roads: our travel time assumes a road is open, and
-only ignores a road when it is \emph{more likely} blocked than open. Most roads
+The main reason is blocked roads: our travel time assumes a road is not blocked,
+and only ignores a road when it has more than a 50\% chance of being blocked. Most roads
 have no reports and a 13.5\% chance of being blocked, so a route over several
 of them often runs into a blocked road.
 
@@ -214,7 +214,11 @@ slowdown just to get a better number would be cheating, so we kept it.
 \textbf{Limitations.} The simulation uses our own probabilities as the ``truth'',
 so it cannot prove that the probabilities in the data are realistic. The plan
 checker uses the same road model as the planner. And during the simulation,
-responders cannot be reassigned.
+responders cannot be reassigned. Finally, once an urgent incident will be late
+anyway, the planner gives it no extra weight: a late Critical incident counts
+the same as a late Low one, so it can end up behind less urgent tasks. We did
+not see this in the three scenarios, but it did happen in a stress test with
+40 incidents at the same time.
 
 \textbf{What I would improve next}, each time checked with the same simulation:
 \begin{enumerate}
@@ -222,7 +226,9 @@ responders cannot be reassigned.
     arrival time;
   \item include the risk of a blocked road (and the detour) in the cost of a
     road;
-  \item estimate the weather of roads without reports from nearby reports.
+  \item estimate the weather of roads without reports from nearby reports;
+  \item give late urgent incidents more weight, for example by counting the
+    response time per priority.
 \end{enumerate}
 
 \textbf{About working with the LLM.} The LLM was fast and good at explaining

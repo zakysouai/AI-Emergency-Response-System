@@ -903,6 +903,63 @@ Het experiment met basistijden en de vergelijking met medestudenten staan er **n
 
 ---
 
+## 2026-11-11: Finale controle (`FINALE_CONTROLE.md`)
+
+**Aanleiding:** de student vroeg één grote, zo kritisch mogelijke controle van alles, met elke twijfel genoteerd, om daarna samen punt per punt te beslissen.
+
+**Aanpak:** alle code opnieuw nagelezen, `run.py` gedraaid op zelfgemaakte randgevallen (kopieën van de scenario's in de scratchpad), een stresstest met 40 gelijktijdige incidenten, de repo-inhoud (`git ls-files`) en de gecompileerde PDF nagekeken. Er is nog **niets aangepast**.
+
+**Belangrijkste vondsten:**
+- **Echte fouten:** `run.py` crasht bij een scenario zonder incidenten (deling door nul in Monte Carlo); `statistics.txt` neemt de spatie vóór de dubbele punt over uit een opmaakartefact van de PDF; `Busy` zonder wachttijd wordt stil 0.
+- **Repo/verslag:** de PDF in de repo is verouderd, de tex mist de naam, een verkeerde zin over τ ("more likely blocked than open"), en verouderde `plan.json`/`statistics.txt` in de hoofdmap. De scripts achter de mutatietests en de A\*-meting staan niet in de repo.
+- **Ontwerp:** een te laat Critical-incident weegt niet meer dan een Low (stresstest: aankomst 10592 s bij deadline 1550); geen constraint propagation; de knoopgrens geeft geen garantie bij grote problemen.
+
+Alles staat met bewijs en opties in `FINALE_CONTROLE.md`. De beslissingen volgen.
+
+---
+
+## 2026-11-12: Fixes A1–A4 uit de finale controle
+
+| # | Wat | Gekozen | Waarom |
+|---|---|---|---|
+| A1 | `run.py` crashte zonder incidenten (deling door nul in Monte Carlo) | Geen percentage meer per wereld als er geen incidenten zijn; de tekst toont "n/a", zoals `statistics.txt` al deed. Het aantal werelden in de kop komt nu uit `not_reached` | Zonder incidenten bestaat er geen percentage; "n/a" is eerlijker dan 0% of 100% |
+| A2 | `System statistics :` met een spatie vóór de dubbele punt, overgenomen uit een opmaakartefact van de PDF | `System statistics:`, `Average response time: …`, `Deadlines met: …`, ook in de Monte Carlo-sectie | Het JSON-voorbeeld op dezelfde pagina toont hetzelfde artefact (`" responder_id "`), dus de spatie is niet bedoeld |
+| A3 | `Busy` zonder `time_until_available` werd stil 0 | Een waarschuwing; de waarde blijft 0 | Zelfde aanpak als "Available met een wachttijd": vreemde maar bruikbare data → waarschuwing, geen fout |
+| A4 | Een tweede report van dezelfde bron op één weg telde stil als onafhankelijk bewijs | Een waarschuwing; het report telt nog mee | Of het een nieuwe waarneming is of een kopie, kunnen we niet weten; de gebruiker moet het wel zien |
+
+**Tests:** 3 nieuwe (`test_data.py`: A3, A4; `test_montecarlo.py`: A1, met `evaluate`, de tekst en `run.py` op een scenario zonder incidenten); de verwachte tekst in 7 bestaande tests aangepast aan A2. De bestaande test "geen waarschuwingen in de 3 scenario's" bewijst dat A3/A4 daar geen valse meldingen geven. **223 tests slagen.**
+
+**Resultaten:** `results/Scenario*/statistics.txt` opnieuw gegenereerd. Alleen de opmaak veranderde (A2), geen enkel cijfer; `results/evaluation.txt` is identiek.
+
+---
+
+## 2026-11-12: Nieuwe versie van het verslag nagekeken (`report/report.tex`)
+
+De student zette de tex van Overleaf (met naam en studentennummer) terug in de repo. Elke bewering nagekeken tegen de code, het logboek en `results/`. Gevonden en verbeterd:
+
+| Wat | Waarom fout | Nu |
+|---|---|---|
+| "11 instead of 7 out of 12" | De Overleaf-versie was van vóór de rechtzetting van 11/11; de zin las alsof ons plan 11/12 haalt | De uitleg dat het alleen de *voorspelling* is zonder verkeersfactor, en dat ons plan 7/12 blijft |
+| "a road that is more likely blocked than open is not used" (2×) | De regel is P(Blocked) > 0,5, niet P(Blocked) > P(Open) (= B3 uit de finale controle) | "more than a 50% chance of being blocked" |
+| "our travel time assumes a road is open" | De kost rekent ook met Congested; ze veronderstelt alleen "niet geblokkeerd" | "assumes a road is not blocked" |
+| "220 automatic tests" | Na de fixes A1–A4 zijn het er 223 | 223 |
+
+Verder in orde: alle cijfers in de tabel en de tekst (71,4/58,3/55,0; 50,2/54,6/42,7; +3 punten revise; 17% bij Storm; 141 mutaties, 12 eerst gemist, 2 equivalent; 25 beschadigde plannen), en de 7 prompts zijn letterlijk. Niet toegevoegd: een zin over C1 (te laat Critical-incident), want daarover is nog niet beslist.
+
+---
+
+## 2026-11-12: C1 in het verslag, C2–C5 voorbereid voor de verdediging
+
+**C1 (een te laat Critical-incident weegt niet meer dan een Low):** gekozen voor optie (a), dus **geen** codewijziging. Een andere doelfunctie op de dag van de deadline zou alle cijfers, tests en het verslag veranderen. In `report.tex` staat het nu:
+- bij *Limitations*: de beperking, met de vermelding dat het in de drie scenario's niet gezien is, maar wel in een stresstest met 40 gelijktijdige incidenten;
+- bij de verbeteringen (punt 4): de responstijd per prioriteit meetellen.
+
+**C2–C5:** uitgeschreven in `VERDEDIGING.md`. Per punt: de vraag die de prof kan stellen, het kernantwoord, de plaats in de code, de eerlijke zwakte, en hoe je het verbetert en beoordeelt. Twee inzichten die bij het voorbereiden boven kwamen:
+- **C2:** forward checking zou bij ons nooit iets snoeien. Elk incident heeft altijd de waarde "onbehandeld", en de deadline is een doel, geen harde constraint, dus een domein wordt nooit leeg. Het snoeien gebeurt met de grens van branch-and-bound.
+- **C3:** door de waardenvolgorde (vroegste aankomst eerst) is de eerste complete oplossing van de zoektocht een gulzige invoeg-oplossing. Het resultaat bij de knoopgrens is dus nooit slechter dan gulzig, want een oplossing vervangt de beste alleen als ze strikt beter is.
+
+---
+
 ## Open punten / volgende stappen
 - [x] Tests voor het wereldmodel (met de hand nagerekende gevallen).
 - [x] Stap 2: UCS één-naar-allen per bron (keuze B).
@@ -923,3 +980,4 @@ Het experiment met basistijden en de vergelijking met medestudenten staan er **n
 - [ ] ~~Kostenmodel fijnregelen~~: laten vallen wegens tijd (keuze 19); komt in het verslag als voorgestelde verbetering, te beoordelen met Monte Carlo.
 - [ ] Later, als er tijd is: optie 4 (risicotoeslag) en optie 5 (weer afleiden).
 - [x] `main.py` (het PyCharm-voorbeeld) verwijderd.
+- [ ] Punten uit `FINALE_CONTROLE.md` één voor één beslissen en uitvoeren.

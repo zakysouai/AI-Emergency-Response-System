@@ -12,6 +12,7 @@ small hand-made city whose sampled travel times are set by hand:
 
 import dataclasses
 import math
+import shutil
 from pathlib import Path
 
 import pytest
@@ -202,8 +203,24 @@ def test_mean_and_confidence_interval():
 def test_monte_carlo_text():
     result = MonteCarloResult((50.0, 100.0), (20.0, 30.0), (1, 0), {"I1": 0.5, "I2": 1.0})
     text = format_monte_carlo(result, seed=9)
-    assert "2 sampled worlds, seed 9" in text and " * Deadlines met : 75.0% +- " in text
-    assert " * Incidents not reached : 0.50 per world" in text and "I1 0.50, I2 1.00" in text
+    assert "2 sampled worlds, seed 9" in text and " * Deadlines met: 75.0% +- " in text
+    assert " * Incidents not reached: 0.50 per world" in text and "I1 0.50, I2 1.00" in text
+
+
+def test_scenario_without_incidents(s1, tmp_path):
+    # No percentage exists without incidents: "n/a", as in statistics.txt, not a crash.
+    scenario = dataclasses.replace(s1, incidents=())
+    world = build_world(scenario)
+    result = evaluate(scenario, [], world, sample_worlds(world, 3, seed=0))
+    assert result.met == () and result.not_reached == (0, 0, 0) and result.p_on_time == {}
+    text = format_monte_carlo(result, seed=0)
+    assert "3 sampled worlds" in text and " * Deadlines met: n/a" in text
+    assert " * Average response time: n/a" in text
+    folder = tmp_path / "empty"
+    shutil.copytree(SCENARIOS / "Scenario1", folder)
+    (folder / "incidents.csv").write_text((folder / "incidents.csv").read_text().splitlines()[0] + "\n")
+    assert run.main([str(folder), "--out", str(tmp_path / "out"), "--samples", "5"]) == 0
+    assert "0 incidents handled" in (tmp_path / "out" / "statistics.txt").read_text()
 
 
 def test_run_adds_monte_carlo_only_when_asked(tmp_path):
